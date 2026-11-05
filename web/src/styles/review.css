@@ -31,7 +31,6 @@
 .two-col { align-items: start; }
 .two-col.tight, .three-col.tight { gap: 10px; }
 .linklike { font: inherit; border: 0; background: none; padding: 0; color: var(--accent-ink); cursor: pointer; text-align: left; }
-.linklike:hover { text-decoration: underline; }
 .section-h { font-size: 12px; font-weight: 650; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 10px; }
 .table-wrap { overflow: auto; }
 .icon-btn { background: none; border: 0; cursor: pointer; color: var(--muted); font: inherit; padding: 2px 4px; border-radius: 6px; display: inline-grid; place-items: center; }
