@@ -168,6 +168,7 @@ func (s *Server) handleCreateComment(w http.ResponseWriter, r *http.Request) {
 		summary = fmt.Sprintf("Commented #%d: %s", c.ID, snippet(commentText(c), 120))
 	}
 	s.event(ctx, rv, store.Event{Kind: kind, CommentID: c.ID, RevisionID: c.RevisionID, Page: c.Page, Summary: summary}, "comments", "review")
+	s.tellComment(ctx, rv, c, parent)
 
 	out, _ := s.store.GetComment(ctx, rv.ID, c.ID)
 	writeJSON(w, http.StatusCreated, out)
@@ -207,7 +208,7 @@ func (s *Server) handleEditComment(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "a comment needs text (up to 20,000 characters) or a picture")
 		return
 	}
-	before := c.Kind + "/" + c.Severity
+	before, oldBody := c.Kind+"/"+c.Severity, c.Body
 	c.Body, c.Images = body, images
 	if c.ParentID == 0 {
 		if in.Kind != "" {
@@ -242,6 +243,7 @@ func (s *Server) handleEditComment(w http.ResponseWriter, r *http.Request) {
 		summary += fmt.Sprintf(" (%s → %s)", strings.TrimSuffix(before, "/"), strings.TrimSuffix(after, "/"))
 	}
 	s.event(ctx, rv, store.Event{Kind: "comment.edited", CommentID: c.ID, RevisionID: c.RevisionID, Page: c.Page, Summary: summary}, "comments", "review")
+	s.tellEdit(ctx, rv, c, oldBody)
 	out, _ := s.store.GetComment(ctx, rv.ID, c.ID)
 	writeJSON(w, http.StatusOK, out)
 }
@@ -326,6 +328,7 @@ func (s *Server) handleCommentStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	kind := "comment." + map[string]string{"open": "reopened", "resolved": "resolved", "rejected": "rejected"}[in.Status]
 	s.event(ctx, rv, store.Event{Kind: kind, CommentID: c.ID, RevisionID: c.RevisionID, Page: c.Page, Summary: summary}, "comments", "review")
+	s.tellThreadStatus(ctx, rv, c, in.Status, in.Note)
 	out, _ := s.store.GetComment(ctx, rv.ID, c.ID)
 	writeJSON(w, http.StatusOK, out)
 }
@@ -419,6 +422,7 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 		summary += fmt.Sprintf(" (from #%d)", t.CommentID)
 	}
 	s.event(ctx, rv, store.Event{Kind: "task.added", TaskID: t.ID, CommentID: t.CommentID, Summary: summary}, "tasks", "review")
+	s.tellTask(ctx, rv, t)
 	out, _ := s.store.GetTask(ctx, rv.ID, t.ID)
 	writeJSON(w, http.StatusCreated, out)
 }
@@ -484,6 +488,9 @@ func (s *Server) handleUpdateTask(w http.ResponseWriter, r *http.Request) {
 		parts = append(parts, "renamed to "+snippet(t.Title, 80))
 	}
 	s.event(ctx, rv, store.Event{Kind: kind, TaskID: t.ID, CommentID: t.CommentID, Summary: strings.Join(parts, ", ")}, "tasks", "review")
+	if was.AssigneeID != t.AssigneeID {
+		s.tellTask(ctx, rv, t)
+	}
 	out, _ := s.store.GetTask(ctx, rv.ID, t.ID)
 	writeJSON(w, http.StatusOK, out)
 }

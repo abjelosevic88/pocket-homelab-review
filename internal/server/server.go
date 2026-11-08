@@ -246,6 +246,16 @@ func (s *Server) Router() http.Handler {
 					r.Get("/report.pdf", s.handleReportPDF)
 				})
 
+				r.Get("/notifications", s.handleListNotifications)
+				r.Get("/notifications/unread", s.handleUnreadNotifications)
+				r.Post("/notifications/read", s.handleReadNotifications)
+				r.Get("/notifications/settings", s.handleNotifyPrefs)
+				r.Put("/notifications/settings", s.handleNotifyPrefs)
+				r.Get("/push/key", s.handlePushKey)
+				r.Post("/push/subscribe", s.handlePushSubscribe)
+				r.Post("/push/unsubscribe", s.handlePushUnsubscribe)
+				r.Post("/push/test", s.handlePushTest)
+
 				r.Get("/users", s.handleListUsers)
 				r.Post("/users", s.handleCreateUser)
 				r.Put("/users/{id}", s.handleUpdateUser)

@@ -4,17 +4,19 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
 import type { APIToken, Settings as SettingsT, User } from '../lib/types'
-import { Confirm, Field, Loading, Modal, Segmented, SettingRow, Tabs, useAsync, useIsMobile, useToast } from '../components/ui'
+import { Confirm, Field, Loading, Modal, Segmented, SettingRow, Switch, Tabs, useAsync, useIsMobile, useToast } from '../components/ui'
 import { Icon } from '../components/icons'
 import { Avatar } from '../components/people'
 import { Select } from '../components/Select'
 import { ShortcutsSheet } from '../components/ShortcutsSheet'
+import { pushOff, pushOn, pushState, type PushState } from '../lib/push'
 import { DATE_FORMATS, TIME_FORMATS, fmtBytes, fmtDateTime, fmtYMD, fmtTime } from '../lib/format'
 
-type TabId = 'general' | 'profile' | 'people' | 'tokens' | 'about'
+type TabId = 'general' | 'notifications' | 'profile' | 'people' | 'tokens' | 'about'
 
 const TABS: { id: TabId; label: string; icon: string; sub: string }[] = [
   { id: 'general', label: 'General', icon: 'settings', sub: 'Date and time formats, the app title, and how review time is measured.' },
+  { id: 'notifications', label: 'Notifications', icon: 'bell', sub: 'What you hear about, in the bell and on this browser or phone.' },
   { id: 'profile', label: 'Profile', icon: 'user', sub: 'Your name, email and password.' },
   { id: 'people', label: 'People', icon: 'users', sub: 'Everyone who has an account on this box.' },
   { id: 'tokens', label: 'API tokens', icon: 'key', sub: 'Personal tokens for scripts and a Homepage widget.' },
@@ -70,6 +72,7 @@ export default function Settings() {
               <p>{current.sub}</p>
             </div>
             {tab === 'general' && <General />}
+            {tab === 'notifications' && <Notifications />}
             {tab === 'profile' && <Profile />}
             {tab === 'people' && <Users />}
             {tab === 'tokens' && <Tokens />}
@@ -126,6 +129,65 @@ function General() {
       <Section title="How review time is measured" icon="clock">
         <p className="muted">The server keeps the clock, not the browser. Time counts while a document is open in a visible tab and you did something with it (scrolled, moved the mouse, typed, zoomed) in the last {Math.round((f.idle_after_seconds || 120) / 60)} minute(s). Several tabs count once. The time goes to the page in view, which is how the report knows which pages each person actually read.</p>
         <p className="muted small">Uploads up to {f.max_upload_mb} MB. Set by whoever runs the box (<code>IDLE_AFTER</code>, <code>MAX_UPLOAD_MB</code>).</p>
+      </Section>
+    </div>
+  )
+}
+
+const NOTIFY_KINDS: { id: string; title: string; help: string }[] = [
+  { id: 'mention', title: 'Mentions', help: 'Someone writes @you or @everyone in a thread.' },
+  { id: 'reply', title: 'Your threads', help: 'A reply in a thread you wrote in; your thread resolved, rejected or reopened.' },
+  { id: 'revision', title: 'New versions', help: 'A new version of a document you review is uploaded.' },
+  { id: 'review', title: 'Reviews', help: 'You are added to a review; it starts, is approved, rejected, cancelled or reopened, or changes are requested.' },
+  { id: 'task', title: 'Tasks', help: 'A task is given to you.' },
+  { id: 'thread', title: 'New threads on your reviews', help: 'Someone comments, asks or raises an issue on a review you own.' },
+  { id: 'verdict', title: 'Verdicts on your reviews', help: 'A reviewer finishes or an approver decides on a review you own.' },
+]
+
+const PUSH_WORDS: Record<PushState, string> = {
+  unsupported: 'This browser cannot show notifications from Pocket Review.',
+  'ios-home': 'On an iPhone: Share → “Add to Home Screen”, open Pocket Review from there, then switch this on.',
+  denied: 'Notifications are blocked for Pocket Review in this browser’s settings. Allow them there, then switch this on.',
+  off: 'Off — you still see everything in the bell.',
+  on: 'On — what you switch on below also pops up here, even with Pocket Review closed.',
+}
+
+function Notifications() {
+  const { toast } = useToast()
+  const [off, setOff] = useState<string[] | null>(null)
+  const [push, setPush] = useState<PushState | null>(null)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    api.get<{ off: string[] }>(`${V1}/notifications/settings`).then(r => setOff(r.off)).catch(e => toast((e as Error).message, 'err'))
+    pushState().then(setPush)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  if (!off) return <Loading />
+  const flipKind = async (id: string, on: boolean) => {
+    const next = on ? off.filter(k => k !== id) : [...off, id]
+    setOff(next)
+    try { await api.put(`${V1}/notifications/settings`, { off: next }) } catch (e) { toast((e as Error).message, 'err') }
+  }
+  const flipPush = async (v: boolean) => {
+    setBusy(true)
+    try { setPush(v ? await pushOn() : await pushOff()) } catch (e) { toast((e as Error).message, 'err') } finally { setBusy(false) }
+  }
+  const test = async () => {
+    try { const r = await api.post<{ ok: boolean; message?: string; error?: string }>(`${V1}/push/test`); toast(r.ok ? r.message || 'Sent' : r.error || 'Not sent', r.ok ? 'ok' : 'err') } catch (e) { toast((e as Error).message, 'err') }
+  }
+  return (
+    <div className="stack loose">
+      <Section title="On this browser or phone" icon="bell" sub="Pop-up notifications, also when Pocket Review is closed. Switch it on on every device you want them on."
+        actions={push === 'on' && <button type="button" className="btn sm" onClick={test}>Send a test</button>}>
+        <SettingRow title="Notifications here" help={push ? PUSH_WORDS[push] : '…'}>
+          <Switch checked={push === 'on'} onChange={flipPush} label="Notifications here" disabled={busy || !push || push === 'unsupported' || push === 'ios-home' || push === 'denied'} />
+        </SettingRow>
+      </Section>
+      <Section title="Tell me about" sub="Each goes to the bell (top right) and, when switched on above, to this browser or phone. You never hear about what you did yourself.">
+        {NOTIFY_KINDS.map(k => (
+          <SettingRow key={k.id} title={k.title} help={k.help}>
+            <Switch checked={!off.includes(k.id)} onChange={v => flipKind(k.id, v)} label={k.title} />
+          </SettingRow>
+        ))}
       </Section>
     </div>
   )

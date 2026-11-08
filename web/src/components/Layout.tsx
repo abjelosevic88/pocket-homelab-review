@@ -12,6 +12,8 @@ import { ShortcutsSheet } from './ShortcutsSheet'
 import { NewReview } from '../pages/Reviews'
 import { type MenuItem, MenuButton, modalOpen, useIsMobile, useMediaQuery } from './ui'
 import { AskButton } from './AskButton'
+import { NotificationBell } from './Notifications'
+import { pushRefresh } from '../lib/push'
 
 const SIDEBAR_KEY = 'pcl-sidebar'
 
@@ -43,6 +45,8 @@ export default function Layout() {
   const toggleSidebar = () => setSidebarOpen(o => { drawerOpenedAt.current = performance.now(); const n = !o; if (!drawer) localStorage.setItem(SIDEBAR_KEY, n ? '1' : '0'); return n })
   const closeDrawer = () => { if (drawer) setSidebarOpen(false) }
   useEffect(() => { document.querySelector('.content')?.scrollTo({ top: 0 }) }, [loc.pathname])
+  // keep this browser's notification subscription on the box (it can change or be forgotten)
+  useEffect(() => { pushRefresh() }, [])
 
   const [palette, setPalette] = useState(false)
   const [shortcuts, setShortcuts] = useState(false)
@@ -106,6 +110,7 @@ export default function Layout() {
     { id: 'finished', label: 'Finished reviews', icon: 'archive', keywords: 'closed approved rejected done', run: () => navigate('/reviews?status=closed') },
     { id: 'tasks', label: 'Your tasks', icon: 'check-square', hint: 'T', keywords: 'todo assigned', run: () => navigate('/tasks') },
     { id: 'settings', label: 'Settings', icon: 'settings', hint: ',', run: () => navigate('/settings') },
+    { id: 'notifications', label: 'Notification settings', icon: 'bell', keywords: 'push phone mention alerts', run: () => navigate('/settings/notifications') },
     { id: 'profile', label: 'Profile & password', icon: 'user', keywords: 'name email password account', run: () => navigate('/settings/profile') },
     { id: 'tokens', label: 'API tokens', icon: 'key', keywords: 'bearer homepage script', run: () => navigate('/settings/tokens') },
     { id: 'shortcuts', label: 'Keyboard shortcuts', icon: 'keyboard', hint: '?', run: () => setShortcuts(true) },
@@ -167,6 +172,7 @@ function TopBar({ onMenu, onPalette, mobile, compact, sidebarOpen, crumb }: { on
       </h1>
       <span className="spacer" />
       <button type="button" className="btn ghost icon-only" onClick={onPalette} aria-label="Search" title="Search (⌘K or /)"><Icon name="search" size={18} /></button>
+      <NotificationBell />
       <AskButton />
       <MenuButton label="Account" className="avatar-btn" align="right" width={220} items={avatarMenu}>
         {user ? <Avatar id={user.id} name={user.name || user.email} size="xl" title="" /> : <Icon name="user" size={18} />}

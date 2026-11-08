@@ -14,6 +14,7 @@ import Compare from '../components/Compare'
 import { countPages, isPdf, PdfDrop, PersonPicker, RoleBadge, RoleSelect, SeverityBadge, StatusBadge, SourceChip } from '../components/review-bits'
 import { Select } from '../components/Select'
 import { AttachButton, AttachStrip, CommentImages, useImageAttach } from '../components/attachments'
+import { MentionText, MentionTextarea } from '../components/mentions'
 import { EVERYONE, parsePeopleSel, PeopleFilter, PeopleSel, PersonOption, personShown } from '../components/PeopleFilter'
 
 type Tab = 'threads' | 'tasks' | 'people' | 'log'
@@ -93,6 +94,23 @@ export default function ReviewPage() {
     return [...m.values()].sort((a, b) => Number(b.id === user?.id) - Number(a.id === user?.id) || a.name.localeCompare(b.name))
   }, [review, shown, user])
   const visible = useMemo(() => shown.filter(t => personShown(people, t.author_id)), [shown, people])
+
+  // ?c=<comment>: a notification points at a thread — show its revision, open it, and count it as read
+  const wantComment = Number(params.get('c')) || 0
+  useEffect(() => {
+    if (!wantComment || !review || !threads.length) return
+    const t = threads.find(x => x.id === wantComment || x.replies?.some(r => r.id === wantComment))
+    if (t && !shown.some(x => x.id === t.id) && t.revision_id && t.revision_id !== revId && review.revisions.some(v => v.id === t.revision_id)) {
+      setParams(p => { p.set('v', String(t.revision_id)); return p }, { replace: true })
+      return
+    }
+    setParams(p => { p.delete('c'); return p }, { replace: true })
+    api.post(`${V1}/notifications/read`, { review_id: rid, comment_id: t?.id ?? wantComment }).then(() => window.dispatchEvent(new CustomEvent('pcl:inbox'))).catch(() => {})
+    if (!t) return
+    setSelected(t.id); setTab('threads')
+    if (!personShown(people, t.author_id)) setPeople(EVERYONE)
+    setJump({ page: t.page || 1, y: t.anchor?.rects?.[0]?.y ?? 0, nonce: Date.now(), threadId: t.id })
+  }, [wantComment, review, threads, shown, revId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (err) return <div className="callout danger"><Icon name="alert" size={15} /><span>{err === 'not found' ? 'This review does not exist, or you are not on it.' : err} <Link to="/reviews">Back to reviews</Link></span></div>
   if (!review) return <Loading />
@@ -194,9 +212,9 @@ export default function ReviewPage() {
           </div>
           <div className="side-body">
             {tab === 'threads' && <>
-              {pending && <Composer rid={rid} revisionId={revId} pending={pending} onCancel={() => setPending(null)}
+              {pending && <Composer rid={rid} revisionId={revId} people={review.participants} pending={pending} onCancel={() => setPending(null)}
                 onSaved={c => { setPending(null); loadThreads(); loadReview(); setSelected(c.id) }} />}
-              {!pending && canComment && <p className="muted small hint"><Icon name="info" size={14} /><span>Select text in the document and press <b>Comment</b>, or switch to <b>Select area</b> and drag a box. {!isCurrent && 'You are on an older revision; new comments go on it.'}</span></p>}
+              {!pending && canComment && <p className="muted small hint"><Icon name="info" size={14} /><span>Select text in the document and press <b>Comment</b>, or switch to <b>Select area</b> and drag a box. Type <b>@</b> to mention someone. {!isCurrent && 'You are on an older revision; new comments go on it.'}</span></p>}
               <Threads review={review} threads={visible} carried={carried} people={people} setPeople={setPeople} personOptions={personOptions} meId={user?.id} hidden={shown.length - visible.length} page={page} selected={selected} onSelect={select}
                 reload={() => { loadThreads(); loadReview() }} onTask={c => setTaskFrom(c)} locked={locked} tasks={tasks} onOpenTasks={() => setTab('tasks')} />
             </>}
@@ -260,8 +278,9 @@ function Actions({ review, me, decider, onStatus, openModal }: { review: Review;
 
 // ---------- composer ----------
 
-function Composer({ rid, revisionId, pending, onCancel, onSaved }: { rid: number; revisionId: number; pending: { page: number; anchor: Anchor }; onCancel: () => void; onSaved: (c: Comment) => void }) {
+function Composer({ rid, revisionId, people, pending, onCancel, onSaved }: { rid: number; revisionId: number; people: Participant[]; pending: { page: number; anchor: Anchor }; onCancel: () => void; onSaved: (c: Comment) => void }) {
   const { toast } = useToast()
+  const { user } = useApp()
   const [kind, setKind] = useState<CommentKind>('comment')
   const [severity, setSeverity] = useState<Severity>('major')
   const [body, setBody] = useState('')
@@ -284,7 +303,7 @@ function Composer({ rid, revisionId, pending, onCancel, onSaved }: { rid: number
       {pending.anchor.quote && <blockquote className="quote">{pending.anchor.quote}</blockquote>}
       <Segmented size="sm" value={kind} onChange={setKind} options={[{ value: 'comment', label: <><Icon name="message" size={13} />Comment</> }, { value: 'question', label: <><Icon name="help" size={13} />Question</> }, { value: 'issue', label: <><Icon name="alert" size={13} />Issue</> }]} />
       {kind === 'issue' && <Segmented size="sm" value={severity} onChange={setSeverity} options={[{ value: 'minor', label: 'Minor' }, { value: 'major', label: 'Major' }, { value: 'critical', label: 'Critical' }]} />}
-      <textarea ref={ref} rows={3} value={body} onChange={e => setBody(e.target.value)} placeholder={kind === 'issue' ? 'What is wrong, and what should it say?' : kind === 'question' ? 'What would you like to know?' : 'Your comment… (paste a picture with ⌘V)'}
+      <MentionTextarea ref={ref} rows={3} value={body} onChange={setBody} people={people} meId={user?.id} placeholder={kind === 'issue' ? 'What is wrong, and what should it say? (@ to mention)' : kind === 'question' ? 'What would you like to know? (@ to mention)' : 'Your comment… (@ to mention, ⌘V to paste a picture)'}
         onPaste={att.onPaste} onDrop={att.onDrop}
         onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) save(); if (e.key === 'Escape') onCancel() }} />
       <AttachStrip att={att} />
@@ -350,6 +369,7 @@ function ThreadCard({ review, t, carried, open, onSelect, reload, onTask, locked
   const run = async (fn: () => Promise<unknown>, msg?: string) => { setBusy(true); try { await fn(); reload(); if (msg) toast(msg) } catch (e) { toast((e as Error).message, 'err') } finally { setBusy(false) } }
   const setStatus = (status: ThreadStatus) => run(async () => { await api.post(`${V1}/reviews/${review.id}/comments/${t.id}/status`, { status, note }); setClosing(null); setNote('') },
     { open: 'Reopened', resolved: 'Resolved', rejected: 'Rejected' }[status])
+  const del = (c: Comment) => window.confirm(c.parent_id ? 'Delete this reply?' : (t.replies?.length ? 'Delete this comment? The replies stay.' : 'Delete this thread?')) && run(() => api.del(`${V1}/reviews/${review.id}/comments/${c.id}`), 'Deleted')
   const canSend = (!!reply.trim() || att.has) && !att.uploading
   const send = () => canSend && run(async () => { await api.post(`${V1}/reviews/${review.id}/comments`, { parent_id: t.id, body: reply, images: att.ids }); setReply(''); att.clear() })
   return (
@@ -368,6 +388,7 @@ function ThreadCard({ review, t, carried, open, onSelect, reload, onTask, locked
           <span className="muted small">#{t.id} · <button type="button" className="linklike" onClick={e => { e.stopPropagation(); onSelect() }}>page {t.page || '—'}</button> · {ago(t.created_at)}{t.edited_at && ' · edited'}</span>
         </span>
         {(t.replies?.length ?? 0) > 0 && !open && <span className="badge" title="Replies"><Icon name="reply" size={11} />{t.replies!.length}</span>}
+        {mine && !locked && !t.deleted && editing?.id !== t.id && <OwnMenu onEdit={() => setEditing(t)} onDelete={() => del(t)} />}
       </div>
       {t.anchor?.quote && <blockquote className="quote">{t.anchor.quote}</blockquote>}
       {tasks.length > 0 && (
@@ -380,17 +401,17 @@ function ThreadCard({ review, t, carried, open, onSelect, reload, onTask, locked
         </div>
       )}
       {editing?.id === t.id ? <EditBox review={review} c={t} onDone={() => { setEditing(null); reload() }} /> :
-        <>{(t.body || t.deleted) && <div className={`body ${open ? '' : 'clamp'}`}>{t.deleted ? <i className="muted">deleted</i> : t.body}</div>}
+        <>{(t.body || t.deleted) && <div className={`body ${open ? '' : 'clamp'}`}>{t.deleted ? <i className="muted">deleted</i> : <MentionText text={t.body} people={review.participants} meId={user?.id} />}</div>}
           {!t.deleted && <CommentImages rid={review.id} ids={t.images} />}</>}
       {open && <>
         {t.replies?.map(r => (
           <div key={r.id} className="reply">
             <Avatar id={r.author_id} name={r.author_name} size="sm" />
             <div className="grow">
-              <div className="small"><b>{r.author_name}</b> <span className="muted">{ago(r.created_at)}{r.edited_at && ' · edited'}</span>
-                {r.author_id === user?.id && !locked && !r.deleted && <span className="reply-tools"><button type="button" className="linklike" onClick={() => setEditing(r)}>edit</button> <button type="button" className="linklike danger-text" onClick={() => run(() => api.del(`${V1}/reviews/${review.id}/comments/${r.id}`), 'Deleted')}>delete</button></span>}</div>
+              <div className="small reply-head"><span className="grow"><b>{r.author_name}</b> <span className="muted">{ago(r.created_at)}{r.edited_at && ' · edited'}</span></span>
+                {r.author_id === user?.id && !locked && !r.deleted && editing?.id !== r.id && <OwnMenu onEdit={() => setEditing(r)} onDelete={() => del(r)} />}</div>
               {editing?.id === r.id ? <EditBox review={review} c={r} onDone={() => { setEditing(null); reload() }} /> : <>
-                {(r.body || r.deleted) && <div className="body">{r.deleted ? <i className="muted">deleted</i> : r.body}</div>}
+                {(r.body || r.deleted) && <div className="body">{r.deleted ? <i className="muted">deleted</i> : <MentionText text={r.body} people={review.participants} meId={user?.id} />}</div>}
                 {!r.deleted && <CommentImages rid={review.id} ids={r.images} />}</>}
             </div>
           </div>
@@ -398,7 +419,7 @@ function ThreadCard({ review, t, carried, open, onSelect, reload, onTask, locked
         {t.status !== 'open' && <div className={`status-note st-${t.status}`}>{t.status === 'resolved' ? 'Resolved' : 'Rejected'} {t.status_at && ago(t.status_at)}{t.status_note && <>: {t.status_note}</>}</div>}
         {canReply && t.status === 'open' && (
           <div className="reply-box" onClick={e => e.stopPropagation()}>
-            <textarea rows={2} value={reply} onChange={e => setReply(e.target.value)} placeholder="Reply… (paste a picture with ⌘V)" onPaste={att.onPaste} onDrop={att.onDrop} onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) send() }} />
+            <MentionTextarea rows={2} value={reply} onChange={setReply} people={review.participants} meId={user?.id} placeholder="Reply… (@ to mention, ⌘V to paste a picture)" onPaste={att.onPaste} onDrop={att.onDrop} onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) send() }} />
             <AttachStrip att={att} />
             <div className="row"><AttachButton att={att} /><span className="spacer" /><button type="button" className="btn primary sm" onClick={send} disabled={busy || !canSend}>Reply</button></div>
           </div>
@@ -416,7 +437,7 @@ function ThreadCard({ review, t, carried, open, onSelect, reload, onTask, locked
             {canClose && t.status !== 'open' && <button type="button" className="btn sm" onClick={() => setStatus('open')}><Icon name="undo" size={14} />Reopen</button>}
             {canReply && <button type="button" className="btn ghost sm" onClick={onTask}><Icon name="check-square" size={14} />Make task</button>}
             <span className="spacer" />
-            {mine && !locked && !t.deleted && <><button type="button" className="btn ghost sm" onClick={() => setEditing(t)}>Edit</button><button type="button" className="btn ghost sm danger-text" onClick={() => run(() => api.del(`${V1}/reviews/${review.id}/comments/${t.id}`), 'Deleted')}>Delete</button></>}
+            {mine && !locked && !t.deleted && <><button type="button" className="btn ghost sm" onClick={() => setEditing(t)}><Icon name="edit" size={14} />Edit</button><button type="button" className="btn ghost sm danger-text" onClick={() => del(t)}>Delete</button></>}
           </div>
         )}
       </>}
@@ -424,8 +445,15 @@ function ThreadCard({ review, t, carried, open, onSelect, reload, onTask, locked
   )
 }
 
+/** Edit / Delete on your own comment or reply. */
+function OwnMenu({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
+  return <MenuButton label="Edit or delete" className="btn ghost icon-only xs own-menu" align="right" width={150}
+    items={[{ label: 'Edit', icon: 'edit', onSelect: onEdit }, { label: 'Delete', icon: 'trash', danger: true, onSelect: onDelete }]}><Icon name="more" size={15} /></MenuButton>
+}
+
 function EditBox({ review, c, onDone }: { review: Review; c: Comment; onDone: () => void }) {
   const { toast } = useToast()
+  const { user } = useApp()
   const [body, setBody] = useState(c.body)
   const [kind, setKind] = useState<CommentKind>(c.kind)
   const [severity, setSeverity] = useState<Severity>(c.severity || 'major')
@@ -440,7 +468,8 @@ function EditBox({ review, c, onDone }: { review: Review; c: Comment; onDone: ()
     <div className="grid" style={{ gap: 6 }} onClick={e => e.stopPropagation()}>
       {root && <Segmented size="sm" value={kind} onChange={setKind} options={[{ value: 'comment', label: 'Comment' }, { value: 'question', label: 'Question' }, { value: 'issue', label: 'Issue' }]} />}
       {root && kind === 'issue' && <Segmented size="sm" value={severity} onChange={setSeverity} options={[{ value: 'minor', label: 'Minor' }, { value: 'major', label: 'Major' }, { value: 'critical', label: 'Critical' }]} />}
-      <textarea rows={3} value={body} onChange={e => setBody(e.target.value)} onPaste={att.onPaste} onDrop={att.onDrop} autoFocus />
+      <MentionTextarea rows={3} value={body} onChange={setBody} people={review.participants} meId={user?.id} onPaste={att.onPaste} onDrop={att.onDrop} autoFocus
+        onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) save(); if (e.key === 'Escape') { e.stopPropagation(); onDone() } }} />
       <AttachStrip att={att} />
       <div className="row"><AttachButton att={att} /><span className="spacer" /><button type="button" className="btn sm" onClick={onDone}>Cancel</button><button type="button" className="btn primary sm" onClick={save} disabled={!ready}>Save</button></div>
     </div>

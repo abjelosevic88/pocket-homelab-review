@@ -363,6 +363,7 @@ func (s *Server) handleReviewStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.event(ctx, rv, store.Event{Kind: kind, Summary: summary, RevisionID: rv.CurrentRevisionID}, "review", "people")
+	s.tellStatus(ctx, rv, in.Action, note)
 	out, _ := s.store.GetReview(ctx, rv.ID, actorID(ctx))
 	writeJSON(w, http.StatusOK, out)
 }
@@ -413,6 +414,7 @@ func (s *Server) handleVerdict(w http.ResponseWriter, r *http.Request) {
 		summary += " — " + in.Note
 	}
 	s.event(ctx, rv, store.Event{Kind: "verdict." + firstNonEmpty(in.Verdict, "withdrawn"), Summary: summary, RevisionID: rv.CurrentRevisionID}, "people")
+	told := false // the status change below tells everyone, the owner included
 
 	if decider {
 		to := ""
@@ -443,7 +445,12 @@ func (s *Server) handleVerdict(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			s.event(ctx, rv, store.Event{Kind: "review." + to, Summary: "The review is now " + statusLabel(to), RevisionID: rv.CurrentRevisionID}, "review")
+			s.tellStatus(ctx, rv, map[string]string{store.StatusApproved: "approved", store.StatusChangesRequested: "changes", store.StatusRejected: "rejected"}[to], in.Note)
+			told = true
 		}
+	}
+	if !told {
+		s.tellVerdict(ctx, rv, decider, in.Verdict, in.Note)
 	}
 	out, _ := s.store.GetReview(ctx, rv.ID, u.ID)
 	writeJSON(w, http.StatusOK, out)
@@ -505,6 +512,7 @@ func (s *Server) addPerson(ctx context.Context, rv *store.Review, in invite) (*s
 		s.log.Info("account created for a review invite", "email", u.Email, "by", userFrom(ctx).Email)
 	}
 	s.event(ctx, rv, store.Event{Kind: "participant.added", Summary: summary}, "people")
+	s.tellAdded(ctx, rv, u.ID, in.Role)
 	return u, nil
 }
 
@@ -696,6 +704,7 @@ func (s *Server) handleUploadRevision(w http.ResponseWriter, r *http.Request) {
 		summary += " — " + rev.Note
 	}
 	s.event(ctx, rv, store.Event{Kind: "revision.uploaded", RevisionID: rev.ID, Summary: summary}, "review")
+	s.tellRevision(ctx, rv, rev)
 	if rev.Number > 1 {
 		_ = s.store.ResetVerdicts(ctx, rv.ID)
 		if rv.Status == store.StatusChangesRequested {

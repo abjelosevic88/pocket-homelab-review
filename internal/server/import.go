@@ -79,6 +79,7 @@ func (s *Server) storeRevision(r *http.Request, rv *store.Review, f io.Reader, f
 		summary += " — " + rev.Note
 	}
 	s.event(ctx, rv, store.Event{Kind: "revision.uploaded", RevisionID: rev.ID, Summary: summary}, "review")
+	s.tellRevision(ctx, rv, rev)
 	if rev.Number > 1 {
 		_ = s.store.ResetVerdicts(ctx, rv.ID)
 		if rv.Status == store.StatusChangesRequested {
@@ -174,6 +175,7 @@ func (s *Server) handleImportReview(w http.ResponseWriter, r *http.Request) {
 			return s.queueEvent(ctx, tx, "review.review_started", fmt.Sprint(rv.ID), s.eventPayload(ctx, rv, map[string]any{"title": rv.Title}))
 		}); err == nil {
 			s.event(ctx, rv, store.Event{Kind: "review.started", Summary: "Started the review", RevisionID: rev.ID}, "review", "people")
+			s.tellStatus(ctx, rv, "start", "")
 		}
 	}
 	out, err := s.store.GetReview(ctx, rv.ID, u.ID)

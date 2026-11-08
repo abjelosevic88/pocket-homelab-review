@@ -40,6 +40,7 @@ import (
 //   {"t":"selection","conn":"c7","user_id":2,"name":"Ben","color":"…","page":3,"rects":[…]}
 //   {"t":"changed","what":["comments","events"],"by":2}
 //   {"t":"bye","reason":"removed"}
+//   {"t":"inbox"}                                         a new notification for you (on any review)
 
 var liveColors = []string{"#2563eb", "#db2777", "#059669", "#d97706", "#7c3aed", "#dc2626", "#0891b2", "#65a30d", "#c026d3", "#475569"}
 
@@ -204,6 +205,23 @@ func (h *hub) broadcastPresence(reviewID int64) {
 // notify tells everyone with the review open what to refetch.
 func (h *hub) notify(reviewID, by int64, what ...string) {
 	h.broadcast(reviewID, nil, map[string]any{"t": "changed", "what": what, "by": by})
+}
+
+// inbox tells a person's open documents that they have a new notification.
+func (h *hub) inbox(userID int64) {
+	h.mu.Lock()
+	var targets []*liveConn
+	for _, r := range h.rooms {
+		for c := range r.conns {
+			if c.user.ID == userID {
+				targets = append(targets, c)
+			}
+		}
+	}
+	h.mu.Unlock()
+	for _, c := range targets {
+		c.push(map[string]any{"t": "inbox"})
+	}
 }
 
 // kick closes a person's tabs on a review (they were taken off it).

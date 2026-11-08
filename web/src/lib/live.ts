@@ -85,6 +85,7 @@ export function useLive(reviewId: number, revisionId: number, opts: Options) {
           }
           case 'changed': optsRef.current.onChanged?.(m.what as string[], m.by as number); break
           case 'bye': stopped = true; optsRef.current.onBye?.(); break
+          case 'inbox': window.dispatchEvent(new CustomEvent('pcl:inbox')); break
         }
       }
       s.onclose = () => {

@@ -191,3 +191,17 @@ export interface Report {
   tasks: Task[]
   timeline: Event[]
 }
+
+export interface Notification {
+  id: number
+  review_id: number
+  review_title: string
+  kind: 'mention' | 'reply' | 'thread' | 'revision' | 'review' | 'verdict' | 'task'
+  actor_id: number
+  actor_name: string
+  comment_id: number
+  title: string
+  body: string
+  created_at: string
+  read_at: string | null
+}
