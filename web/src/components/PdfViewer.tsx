@@ -160,11 +160,41 @@ export default function PdfViewer(props: Props) {
       const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY
       setZoom(zoomRef.current * Math.exp(-Math.max(-120, Math.min(120, dy)) * 0.0022))
     }
-    // Safari on a Mac sends its own pinch events
+    // Two-finger pinch on a phone or tablet zooms the document itself (redrawn
+    // sharp once the fingers stop), not the browser's magnifier over the page.
+    // The spot under the fingers stays under them, and moving both pans.
+    let pinch: { dist: number; zoom: number; anchor: NonNullable<ReturnType<typeof anchorAt>> | null } | null = null
+    let frame = 0
+    const spread = (t: TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY)
+    const middle = (t: TouchList) => {
+      const r = root.getBoundingClientRect()
+      return { x: (t[0].clientX + t[1].clientX) / 2 - r.left, y: (t[0].clientY + t[1].clientY) / 2 - r.top }
+    }
+    const ts = (e: TouchEvent) => {
+      if (e.touches.length !== 2) { pinch = null; return }
+      e.preventDefault()
+      const m = middle(e.touches)
+      pinch = { dist: spread(e.touches) || 1, zoom: zoomRef.current, anchor: anchorAt(m.x, m.y) }
+    }
+    const tm = (e: TouchEvent) => {
+      if (!pinch || e.touches.length !== 2) return
+      e.preventDefault()
+      const m = middle(e.touches)
+      const next = pinch.zoom * spread(e.touches) / pinch.dist
+      const a = pinch.anchor
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => {
+        if (a) pointerAnchor.current = { ...a, cx: m.x, cy: m.y }
+        setZoom(next)
+      })
+    }
+    const te = (e: TouchEvent) => { if (e.touches.length < 2) pinch = null }
+    // Safari sends its own pinch events (trackpad on a Mac, fingers on an iPhone)
     let start = 1
     const gs = (e: Event) => { e.preventDefault(); start = zoomRef.current }
     const gc = (e: Event) => {
       e.preventDefault()
+      if (pinch) return // the touch handlers above have it
       const g = e as Event & { scale: number; clientX: number; clientY: number }
       const r = root.getBoundingClientRect()
       pointerAnchor.current = anchorAt(g.clientX - r.left, g.clientY - r.top)
@@ -173,7 +203,15 @@ export default function PdfViewer(props: Props) {
     root.addEventListener('wheel', wheel, { passive: false })
     root.addEventListener('gesturestart', gs)
     root.addEventListener('gesturechange', gc)
-    return () => { root.removeEventListener('wheel', wheel); root.removeEventListener('gesturestart', gs); root.removeEventListener('gesturechange', gc) }
+    root.addEventListener('touchstart', ts, { passive: false })
+    root.addEventListener('touchmove', tm, { passive: false })
+    root.addEventListener('touchend', te)
+    root.addEventListener('touchcancel', te)
+    return () => {
+      cancelAnimationFrame(frame)
+      root.removeEventListener('wheel', wheel); root.removeEventListener('gesturestart', gs); root.removeEventListener('gesturechange', gc)
+      root.removeEventListener('touchstart', ts); root.removeEventListener('touchmove', tm); root.removeEventListener('touchend', te); root.removeEventListener('touchcancel', te)
+    }
   }, [anchorAt, setZoom])
 
   // ---- scroll position for the compare view (the line in the middle) ----

@@ -197,11 +197,27 @@ func TestRolesAndApproval(t *testing.T) {
 	if rv["status"] != "approved" {
 		t.Fatalf("status %v, want approved", rv["status"])
 	}
-	// finished reviews are read-only until reopened
-	code, _ = h.do("rita", "POST", p("/comments"), map[string]any{"body": "late", "page": 1})
-	must(t, code, 409, "comment on approved review")
+	// a decided review still takes comments and replies; tasks wait for a reopen
+	code, late := h.do("rita", "POST", p("/comments"), map[string]any{"body": "late", "page": 1})
+	must(t, code, 201, "comment on approved review")
+	code, _ = h.do("ben", "POST", p("/comments"), map[string]any{"body": "noted", "parent_id": late["id"]})
+	must(t, code, 201, "reply on approved review")
+	code, _ = h.do("oscar", "POST", p("/comments"), map[string]any{"body": "me too", "page": 1})
+	must(t, code, 403, "observer comments on approved review")
+	code, _ = h.do("rita", "POST", p("/tasks"), map[string]any{"title": "late task"})
+	must(t, code, 409, "task on approved review")
+	if _, rv = h.do("olga", "GET", p(""), nil); rv["status"] != "approved" {
+		t.Fatalf("a late comment moved the review to %v", rv["status"])
+	}
 	code, _ = h.do("olga", "POST", p("/status"), map[string]any{"action": "reopen"})
 	must(t, code, 200, "reopen")
+	// a cancelled review is read-only
+	code, _ = h.do("olga", "POST", p("/status"), map[string]any{"action": "cancel"})
+	must(t, code, 200, "cancel")
+	code, _ = h.do("rita", "POST", p("/comments"), map[string]any{"body": "after cancel", "page": 1})
+	must(t, code, 409, "comment on cancelled review")
+	code, _ = h.do("olga", "POST", p("/status"), map[string]any{"action": "reopen"})
+	must(t, code, 200, "reopen after cancel")
 
 	// everything above is in the log
 	code, _ = h.do("olga", "GET", p("/events"), nil)

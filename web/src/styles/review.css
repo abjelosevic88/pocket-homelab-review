@@ -267,7 +267,8 @@ a.stat:hover .icon { color: var(--accent); }
 .viewer-bar .btn.ghost.sm { min-width: 28px; padding: 0 6px; color: var(--text-2); }
 .page-input { width: 46px; height: 28px; padding: 0 6px; text-align: center; font-size: 12.5px; }
 .zoom-val { min-width: 54px; font-variant-numeric: tabular-nums; }
-.viewer-scroll { flex: 1; overflow: auto; padding: 16px 20px 40px; position: relative; }
+.viewer-scroll { flex: 1; overflow: auto; padding: 16px 20px 40px; position: relative;
+  touch-action: pan-x pan-y; /* a pinch zooms the document (PdfViewer), not the page */ }
 .pdf-page { position: relative; margin: 0 auto 16px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.18), 0 4px 14px rgba(0,0,0,.08); }
 .pdf-page canvas { display: block; transition: opacity .15s; }
 .pdf-page .page-no { position: absolute; right: -2px; bottom: -18px; font-size: 10.5px; color: var(--muted); }

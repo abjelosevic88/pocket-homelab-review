@@ -84,6 +84,16 @@ func (s *Server) mustBeOpen(w http.ResponseWriter, rv *store.Review) bool {
 	return true
 }
 
+// mustTakeComments guards threads: comments, replies, edits and closing a
+// thread work on a decided review too, not on a cancelled one.
+func (s *Server) mustTakeComments(w http.ResponseWriter, rv *store.Review) bool {
+	if !rv.TakesComments() {
+		writeErr(w, http.StatusConflict, "the review is "+statusLabel(rv.Status)+"; reopen it first")
+		return false
+	}
+	return true
+}
+
 var statusLabels = map[string]string{
 	store.StatusDraft: "a draft", store.StatusInReview: "in review", store.StatusChangesRequested: "waiting for changes",
 	store.StatusApproved: "approved", store.StatusRejected: "rejected", store.StatusCancelled: "cancelled",

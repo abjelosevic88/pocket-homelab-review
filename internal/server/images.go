@@ -33,7 +33,7 @@ func (s *Server) handleUploadImage(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusForbidden, "observers can read but not comment")
 		return
 	}
-	if !s.mustBeOpen(w, rv) {
+	if !s.mustTakeComments(w, rv) {
 		return
 	}
 	limit := int64(maxImageMB) << 20

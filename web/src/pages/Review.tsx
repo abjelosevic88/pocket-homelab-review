@@ -117,8 +117,10 @@ export default function ReviewPage() {
 
   const me = review.participants.find(p => p.user_id === user?.id)
   const role = review.my_role
+  // a decided review (approved/rejected) still takes comments; tasks and revisions wait for a reopen
   const locked = ['approved', 'rejected', 'cancelled'].includes(review.status)
-  const canComment = role !== 'observer' && !locked
+  const threadsLocked = review.status === 'cancelled'
+  const canComment = role !== 'observer' && !threadsLocked
   const approvers = review.participants.filter(p => p.role === 'approver')
   const decider = role === 'approver' || (role === 'owner' && approvers.length === 0)
 
@@ -214,9 +216,9 @@ export default function ReviewPage() {
             {tab === 'threads' && <>
               {pending && <Composer rid={rid} revisionId={revId} people={review.participants} pending={pending} onCancel={() => setPending(null)}
                 onSaved={c => { setPending(null); loadThreads(); loadReview(); setSelected(c.id) }} />}
-              {!pending && canComment && <p className="muted small hint"><Icon name="info" size={14} /><span>Select text in the document and press <b>Comment</b>, or switch to <b>Select area</b> and drag a box. Type <b>@</b> to mention someone. {!isCurrent && 'You are on an older revision; new comments go on it.'}</span></p>}
+              {!pending && canComment && <p className="muted small hint"><Icon name="info" size={14} /><span>Select text in the document and press <b>Comment</b>, or switch to <b>Select area</b> and drag a box. Type <b>@</b> to mention someone. {locked && `The review is ${review.status}; comments and replies are still welcome. `}{!isCurrent && 'You are on an older revision; new comments go on it.'}</span></p>}
               <Threads review={review} threads={visible} carried={carried} people={people} setPeople={setPeople} personOptions={personOptions} meId={user?.id} hidden={shown.length - visible.length} page={page} selected={selected} onSelect={select}
-                reload={() => { loadThreads(); loadReview() }} onTask={c => setTaskFrom(c)} locked={locked} tasks={tasks} onOpenTasks={() => setTab('tasks')} />
+                reload={() => { loadThreads(); loadReview() }} onTask={c => setTaskFrom(c)} locked={threadsLocked} tasksLocked={locked} tasks={tasks} onOpenTasks={() => setTab('tasks')} />
             </>}
             {tab === 'tasks' && <Tasks review={review} tasks={tasks} threads={threads} locked={locked} onNew={() => setTaskFrom(null)} reload={() => { loadTasks(); loadReview() }} onOpenThread={t => select(t)} />}
             {tab === 'people' && <People review={review} live={live.people} reload={loadReview} />}
@@ -314,8 +316,8 @@ function Composer({ rid, revisionId, people, pending, onCancel, onSaved }: { rid
 
 // ---------- threads ----------
 
-function Threads({ review, threads, carried, people, setPeople, personOptions, meId, hidden, page, selected, onSelect, reload, onTask, locked, tasks, onOpenTasks }: {
-  review: Review; threads: Comment[]; carried: Set<number>; page: number; selected: number | null; onSelect: (t: Comment) => void; reload: () => void; onTask: (c: Comment) => void; locked: boolean
+function Threads({ review, threads, carried, people, setPeople, personOptions, meId, hidden, page, selected, onSelect, reload, onTask, locked, tasksLocked, tasks, onOpenTasks }: {
+  review: Review; threads: Comment[]; carried: Set<number>; page: number; selected: number | null; onSelect: (t: Comment) => void; reload: () => void; onTask: (c: Comment) => void; locked: boolean; tasksLocked: boolean
   tasks: Task[]; onOpenTasks: () => void
   people: PeopleSel; setPeople: (sel: PeopleSel) => void; personOptions: PersonOption[]; meId?: number; hidden: number
 }) {
@@ -343,7 +345,7 @@ function Threads({ review, threads, carried, people, setPeople, personOptions, m
       <div className="thread-list">
         {list.map(t => (
           <div key={t.id} ref={selected === t.id ? selRef : undefined}>
-            <ThreadCard review={review} t={t} carried={carried.has(t.id)} open={selected === t.id} onSelect={() => onSelect(t)} reload={reload} onTask={() => onTask(t)} locked={locked} tasks={tasks.filter(x => x.comment_id === t.id)} onOpenTasks={onOpenTasks} />
+            <ThreadCard review={review} t={t} carried={carried.has(t.id)} open={selected === t.id} onSelect={() => onSelect(t)} reload={reload} onTask={() => onTask(t)} locked={locked} tasksLocked={tasksLocked} tasks={tasks.filter(x => x.comment_id === t.id)} onOpenTasks={onOpenTasks} />
           </div>
         ))}
       </div>
@@ -351,7 +353,7 @@ function Threads({ review, threads, carried, people, setPeople, personOptions, m
   )
 }
 
-function ThreadCard({ review, t, carried, open, onSelect, reload, onTask, locked, tasks, onOpenTasks }: { review: Review; t: Comment; carried: boolean; open: boolean; onSelect: () => void; reload: () => void; onTask: () => void; locked: boolean; tasks: Task[]; onOpenTasks: () => void }) {
+function ThreadCard({ review, t, carried, open, onSelect, reload, onTask, locked, tasksLocked, tasks, onOpenTasks }: { review: Review; t: Comment; carried: boolean; open: boolean; onSelect: () => void; reload: () => void; onTask: () => void; locked: boolean; tasksLocked: boolean; tasks: Task[]; onOpenTasks: () => void }) {
   const { user } = useApp()
   const { toast } = useToast()
   const [reply, setReply] = useState('')
@@ -435,7 +437,7 @@ function ThreadCard({ review, t, carried, open, onSelect, reload, onTask, locked
           <div className="thread-actions">
             {canClose && t.status === 'open' && <><button type="button" className="btn sm" onClick={() => setClosing('resolved')}><Icon name="check" size={14} />Resolve</button><button type="button" className="btn sm" onClick={() => setClosing('rejected')}><Icon name="x" size={14} />Reject</button></>}
             {canClose && t.status !== 'open' && <button type="button" className="btn sm" onClick={() => setStatus('open')}><Icon name="undo" size={14} />Reopen</button>}
-            {canReply && <button type="button" className="btn ghost sm" onClick={onTask}><Icon name="check-square" size={14} />Make task</button>}
+            {canReply && !tasksLocked && <button type="button" className="btn ghost sm" onClick={onTask}><Icon name="check-square" size={14} />Make task</button>}
             <span className="spacer" />
             {mine && !locked && !t.deleted && <><button type="button" className="btn ghost sm" onClick={() => setEditing(t)}><Icon name="edit" size={14} />Edit</button><button type="button" className="btn ghost sm danger-text" onClick={() => del(t)}>Delete</button></>}
           </div>

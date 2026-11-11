@@ -79,6 +79,12 @@ func (r *Review) Locked() bool {
 	return r.Status == StatusApproved || r.Status == StatusRejected || r.Status == StatusCancelled
 }
 
+// TakesComments reports whether people may still talk on the review. A
+// decided review (approved or rejected) stays open for comments and replies,
+// so a reviewer can still have their say after the approver's call; only a
+// cancelled review is read-only.
+func (r *Review) TakesComments() bool { return r.Status != StatusCancelled }
+
 // Revision is one version of the document.
 type Revision struct {
 	ID          int64  `json:"id"`

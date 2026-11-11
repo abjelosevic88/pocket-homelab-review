@@ -75,7 +75,7 @@ func (s *Server) handleCreateComment(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusForbidden, "observers can read but not comment")
 		return
 	}
-	if !s.mustBeOpen(w, rv) {
+	if !s.mustTakeComments(w, rv) {
 		return
 	}
 	var in commentInput
@@ -179,7 +179,7 @@ func (s *Server) handleCreateComment(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleEditComment(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	rv := reviewFrom(ctx)
-	if !s.mustBeOpen(w, rv) {
+	if !s.mustTakeComments(w, rv) {
 		return
 	}
 	c, err := s.store.GetComment(ctx, rv.ID, idParam(r, "cid"))
@@ -251,7 +251,7 @@ func (s *Server) handleEditComment(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDeleteComment(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	rv := reviewFrom(ctx)
-	if !s.mustBeOpen(w, rv) {
+	if !s.mustTakeComments(w, rv) {
 		return
 	}
 	c, err := s.store.GetComment(ctx, rv.ID, idParam(r, "cid"))
@@ -278,7 +278,7 @@ func (s *Server) handleDeleteComment(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleCommentStatus(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	rv := reviewFrom(ctx)
-	if !s.mustBeOpen(w, rv) {
+	if !s.mustTakeComments(w, rv) {
 		return
 	}
 	c, err := s.store.GetComment(ctx, rv.ID, idParam(r, "cid"))
