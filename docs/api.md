@@ -46,6 +46,15 @@ Every review route answers **404** to anyone not on the review, admins included.
 | `GET /dashboard` | `to_review`, `to_approve`, `open_tasks`, `week_text`, `waiting`, `live`, `recent`; good for a Homepage widget. |
 | `GET /activity` | Log across your reviews. |
 
+## Moving out and in
+
+| | |
+|---|---|
+| `GET /export.zip` | The reviews you started: `review.json` (each review, its revisions, every comment with its writer, pictures, tasks, the people on it) and the PDFs and pictures beside it. |
+| `POST /import` | Multipart `file` (or the zip as the body): adds those reviews with you as their owner. Comments keep their writer when that person has an account here, and carry the writer's name otherwise. A review already brought in (same title and start time) is skipped. |
+
+Pocket Move can copy your reviews out and bring them in: `GET /pocket/portable` describes these two for the link scopes `move:export` and `move:import`. A link outside its scopes gets `403`.
+
 ## Live channel
 
 `GET /reviews/{id}/live?revision=&page=` upgrades to a WebSocket (same origin only). Browser → server: `{"t":"state","page":3,"visible":true,"input":true}` every few seconds and on change; `{"t":"cursor","page":3,"x":0.41,"y":0.2}` (page 0 hides it). Server → browser: `hello`, `presence` (every open tab: user, colour, page, active), `cursor`, `changed` (`what`: comments, tasks, review, people, events: refetch those), `bye` (you were taken off the review).

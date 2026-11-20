@@ -134,6 +134,7 @@ func (s *Server) registerWithCore(ctx context.Context) error {
 		URL: s.cfg.CoreAppURL, PublicURL: s.cfg.BaseURL, HealthPath: "/healthz", EnvPrefix: "REVIEW",
 		Publishes: []string{"review.review_started", "review.comment_added", "review.review_decided"},
 		Offers:    linkOffers,
+		Portable:  portable,
 	}
 	// Ask Core for a relying-party client so "Sign in with Pocket Core" needs no configuration.
 	if s.cfg.BaseURL != "" {
@@ -185,6 +186,9 @@ func (s *Server) Router() http.Handler {
 			r.With(s.withReview).Get("/reviews/{rid}/live", s.handleLive)
 			r.With(s.withReview).Post("/reviews/{rid}/revisions", s.handleUploadRevision)
 			r.Post("/reviews/import", s.handleImportReview)
+			r.Get("/pocket/portable", portable.Handler())
+			r.Get("/export.zip", s.handleExportZip)
+			r.Post("/import", s.handleImportZip)
 			r.With(s.withReview).Get("/reviews/{rid}/revisions/{vid}/file", s.handleRevisionFile)
 		})
 

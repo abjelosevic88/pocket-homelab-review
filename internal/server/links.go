@@ -20,6 +20,17 @@ var linkOffers = []core.Offer{
 	{Scope: "reviews:write", Name: "Send documents for review", Description: "Start a review from a document in another app, add a new revision to one, and keep the link back to the original up to date."},
 }
 
+// portable is what Pocket Move may copy out and bring in for a person
+// (docs/move.md in pocket-homelab-core); Register adds move:export/import.
+var portable = &core.Portable{
+	Exports: []core.PortableExport{
+		{Path: "/api/v1/export.zip", File: "review.zip", Kind: core.KindPocket, Title: "The reviews you started: every revision of the document, all comments with who wrote them, pictures, tasks and who was on it"},
+	},
+	Imports: []core.PortableImport{
+		{Path: "/api/v1/import", Kind: core.KindPocket, Form: "file", Title: "Adds the reviews from another box with you as their owner; comments keep their writer's name; reviews already here are skipped"},
+	},
+}
+
 type linkRoute struct {
 	methods string
 	path    *regexp.Regexp
@@ -39,6 +50,9 @@ var linkRoutes = []linkRoute{
 var errLinkScope = errors.New("outside the link's scope")
 
 func linkAllows(scopes []string, r *http.Request) bool {
+	if portable.LinkAllows(scopes, r) {
+		return true
+	}
 	for _, lr := range linkRoutes {
 		if !strings.Contains(" "+lr.methods+" ", " "+r.Method+" ") || !lr.path.MatchString(r.URL.Path) {
 			continue
