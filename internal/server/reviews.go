@@ -808,6 +808,29 @@ func (s *Server) removeFileIfUnused(ctx context.Context, rel string) {
 
 // ---- home ----
 
+// waitingWhy says why an open review waits for the person (Home → Waiting
+// for you): "review", "approve", "changes", "draft", or "" when it does not.
+func waitingWhy(rv *store.Review, uid int64) string {
+	var me *store.Participant
+	for i := range rv.Participants {
+		if rv.Participants[i].UserID == uid {
+			me = &rv.Participants[i]
+		}
+	}
+	switch {
+	case me == nil:
+	case rv.Status == store.StatusInReview && me.Role == store.RoleReviewer && me.State != "done":
+		return "review"
+	case rv.Status == store.StatusInReview && canDecide(rv) && me.Verdict == "":
+		return "approve"
+	case rv.Status == store.StatusChangesRequested && me.Role == store.RoleOwner:
+		return "changes"
+	case rv.Status == store.StatusDraft && me.Role == store.RoleOwner:
+		return "draft"
+	}
+	return ""
+}
+
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	u := userFrom(ctx)
@@ -823,27 +846,12 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	var todo []waiting
 	toReview, toApprove := 0, 0
 	for _, rv := range list {
-		var me *store.Participant
-		for i := range rv.Participants {
-			if rv.Participants[i].UserID == u.ID {
-				me = &rv.Participants[i]
-			}
-		}
-		if me == nil {
-			continue
-		}
-		why := ""
-		switch {
-		case rv.Status == store.StatusInReview && me.Role == store.RoleReviewer && me.State != "done":
-			why = "review"
+		why := waitingWhy(rv, u.ID)
+		switch why {
+		case "review":
 			toReview++
-		case rv.Status == store.StatusInReview && canDecide(rv) && me.Verdict == "":
-			why = "approve"
+		case "approve":
 			toApprove++
-		case rv.Status == store.StatusChangesRequested && me.Role == store.RoleOwner:
-			why = "changes"
-		case rv.Status == store.StatusDraft && me.Role == store.RoleOwner:
-			why = "draft"
 		}
 		if why != "" {
 			todo = append(todo, waiting{rv, why})

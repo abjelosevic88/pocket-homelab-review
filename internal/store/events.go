@@ -77,3 +77,40 @@ func (s *Store) ListEvents(ctx context.Context, f EventFilter) ([]Event, error) 
 	}
 	return out, rows.Err()
 }
+
+// DayEvent is a log line for a day's journal, with the review's title and
+// status now and the person's role on it.
+type DayEvent struct {
+	ReviewID    int64
+	ReviewTitle string
+	Status      string
+	Role        string
+	UserID      int64
+	Kind        string
+	CreatedAt   string
+}
+
+// DayEvents returns, oldest first, what a person did on the reviews they are
+// on between from and to (stored stamps, from inclusive), and the decisions
+// anyone made on the reviews they own.
+func (s *Store) DayEvents(ctx context.Context, userID int64, from, to string) ([]DayEvent, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT e.review_id, r.title, r.status, p.role, COALESCE(e.user_id, 0), e.kind, e.created_at
+		FROM events e JOIN reviews r ON r.id = e.review_id
+		JOIN participants p ON p.review_id = e.review_id AND p.user_id = ?
+		WHERE e.created_at >= ? AND e.created_at < ?
+		AND (e.user_id = ? OR (p.role = 'owner' AND e.kind IN ('review.approved', 'review.rejected', 'review.changes_requested')))
+		ORDER BY e.created_at, e.id LIMIT 5000`, userID, from, to, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []DayEvent{}
+	for rows.Next() {
+		var e DayEvent
+		if err := rows.Scan(&e.ReviewID, &e.ReviewTitle, &e.Status, &e.Role, &e.UserID, &e.Kind, &e.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}

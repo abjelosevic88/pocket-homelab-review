@@ -91,7 +91,7 @@ Roles in detail:
 
 ## Pocket Core
 
-With `CORE_URL` set the app registers with [Pocket Core](https://github.com/abjelosevic88/pocket-homelab-core), offers **Sign in with Pocket Core**, accepts the tokens Core hands to paired phones, and publishes `review.review_started`, `review.comment_added` and `review.review_decided` (each with `audience_emails`, the people on the review). Without it everything works the same.
+With `CORE_URL` set the app registers with [Pocket Core](https://github.com/abjelosevic88/pocket-homelab-core), offers **Sign in with Pocket Core**, accepts the tokens Core hands to paired phones, and publishes `review.review_started`, `review.comment_added` and `review.review_decided` (each with `audience_emails`, the people on the review). Pocket Search finds your reviews (`!review`, `!reviews`), Pocket Day writes down what you did with them each day, and Pocket Hub shows what waits for you, all on their own ([API](docs/api.md#search-day-and-hub)). Without it everything works the same.
 
 ## Documentation
 

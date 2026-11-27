@@ -55,6 +55,18 @@ Every review route answers **404** to anyone not on the review, admins included.
 
 Pocket Move can copy your reviews out and bring them in: `GET /pocket/portable` describes these two for the link scopes `move:export` and `move:import`. A link outside its scopes gets `403`.
 
+## Search, Day and Hub
+
+Pocket Search, Pocket Day and Pocket Hub read your reviews here on their own once this app is registered with Pocket Core (the manifest says what it offers: search, day and widget, in the category *Work*). Each answers only for the reviews you are on, and changes nothing.
+
+| | |
+|---|---|
+| `GET /pocket/search?q=&limit=` | Reviews whose title or description has the words, as the Reviews list finds them, open or finished. `snippet` says where it stands ("Waiting for 2 reviewers · updated 3 Nov", "Approved · updated 20 Nov"); `url` is `/reviews/{id}`. A query without a letter or digit finds nothing. |
+| `GET /pocket/day/{YYYY-MM-DD}?tz=` | A line per review you created, started, commented on, gave a verdict on or decided that day, and per review of yours someone decided ("1 review approved, 2 commented on"). Opening and reading are left out. Without `tz` the day is the server's. |
+| `GET /pocket/widget` | What Home shows under *Waiting for you* (to review or decide first, then your drafts and reviews sent back for changes), then your own reviews waiting for others, with the numbers to review, to decide, waiting for others and open tasks. |
+
+A Core link with `pocket:search`, `pocket:day` or `pocket:widget` opens exactly its one route (and `/auth/me`); `reviews:read` and `reviews:write` do not open them. There is no quick capture: a review needs a document and people.
+
 ## Live channel
 
 `GET /reviews/{id}/live?revision=&page=` upgrades to a WebSocket (same origin only). Browser → server: `{"t":"state","page":3,"visible":true,"input":true}` every few seconds and on change; `{"t":"cursor","page":3,"x":0.41,"y":0.2}` (page 0 hides it). Server → browser: `hello`, `presence` (every open tab: user, colour, page, active), `cursor`, `changed` (`what`: comments, tasks, review, people, events: refetch those), `bye` (you were taken off the review).

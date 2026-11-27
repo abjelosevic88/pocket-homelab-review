@@ -196,6 +196,7 @@ type ReviewFilter struct {
 	Status string // a status, "open" (not finished) or "" for all
 	Role   string
 	Query  string
+	Limit  int // at most this many, 0 = all
 }
 
 // ListReviews returns the reviews a user is on, newest activity first.
@@ -221,6 +222,10 @@ func (s *Store) ListReviews(ctx context.Context, f ReviewFilter) ([]*Review, err
 		args = append(args, "%"+t+"%", "%"+t+"%")
 	}
 	q += ` ORDER BY r.updated_at DESC, r.id DESC`
+	if f.Limit > 0 {
+		q += ` LIMIT ?`
+		args = append(args, f.Limit)
+	}
 	rows, err := s.DB.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err

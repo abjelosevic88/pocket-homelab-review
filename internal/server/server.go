@@ -126,21 +126,27 @@ func (s *Server) coreLoop(ctx context.Context) {
 	}
 }
 
-func (s *Server) registerWithCore(ctx context.Context) error {
+// manifest is what the app tells Core about itself on every registration.
+func (s *Server) manifest() core.Manifest {
 	m := core.Manifest{
 		Slug: "review", Name: "Pocket Review",
 		Description: "Review documents together: comments pinned to the page, issues that get resolved or rejected, tasks, sign-off, live presence and a full report of who spent how long on what.",
-		Icon:        "/favicon.svg", Version: Version,
+		Icon:        "/favicon.svg", Category: "Work", Version: Version,
 		URL: s.cfg.CoreAppURL, PublicURL: s.cfg.BaseURL, HealthPath: "/healthz", EnvPrefix: "REVIEW",
-		Publishes: []string{"review.review_started", "review.comment_added", "review.review_decided"},
-		Offers:    linkOffers,
-		Portable:  portable,
+		Publishes:    []string{"review.review_started", "review.comment_added", "review.review_decided"},
+		Offers:       linkOffers,
+		Portable:     portable,
+		Capabilities: capabilities,
 	}
 	// Ask Core for a relying-party client so "Sign in with Pocket Core" needs no configuration.
 	if s.cfg.BaseURL != "" {
 		m.OIDC = &core.OIDCRequest{RedirectURIs: []string{s.oidcCallbackURL()}}
 	}
-	reg, err := s.core.Register(ctx, s.cfg.CoreRegistrationKey, m)
+	return m
+}
+
+func (s *Server) registerWithCore(ctx context.Context) error {
+	reg, err := s.core.Register(ctx, s.cfg.CoreRegistrationKey, s.manifest())
 	if err != nil {
 		return err
 	}
@@ -209,6 +215,10 @@ func (s *Server) Router() http.Handler {
 				r.Put("/auth/me", s.handleUpdateMe)
 
 				r.Get("/dashboard", s.handleDashboard)
+				// what Pocket Search, Pocket Day and Pocket Hub ask (capabilities.go)
+				r.Get("/pocket/search", core.SearchHandler(s.pocketSearch))
+				r.Get("/pocket/day/{date}", core.DayHandler(s.pocketDay))
+				r.Get("/pocket/widget", core.WidgetHandler(s.pocketWidget))
 				r.Get("/activity", s.handleAllActivity)
 				r.Get("/tasks", s.handleMyTasks)
 

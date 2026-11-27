@@ -22,7 +22,8 @@ import (
 
 // moveHarness is the usual harness behind a fake Core whose
 // pcx_<who>_<export|import|read> tokens are Pocket Move links acting for
-// <who>@example.com (a member to Core).
+// <who>@example.com (a member to Core); pcx_<who>_<search|day|widget|capture|write>
+// carry that one scope (capabilities_test.go).
 func moveHarness(t *testing.T) *harness {
 	t.Helper()
 	coreSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -40,7 +41,8 @@ func moveHarness(t *testing.T) *harness {
 			io.WriteString(w, `{"active":false}`)
 			return
 		}
-		scope := map[string]string{"export": core.ScopeMoveExport, "import": core.ScopeMoveImport, "read": "reviews:read"}[parts[1]]
+		scope := map[string]string{"export": core.ScopeMoveExport, "import": core.ScopeMoveImport, "read": "reviews:read", "write": "reviews:write",
+			"search": core.ScopeSearch, "day": core.ScopeDay, "widget": core.ScopeWidget, "capture": core.ScopeCapture}[parts[1]]
 		email := parts[0] + "@example.com"
 		fmt.Fprintf(w, `{"active":true,"kind":"delegated","scope":%q,"audience":"review","user":{"id":1,"sub":%q,"email":%q,"name":%q,"role":"member"},"app":{"id":7,"slug":"move","name":"Pocket Move"}}`, scope, email, email, parts[0])
 	}))
